@@ -4,6 +4,8 @@ import 'package:obd_reader/pages/account_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/ai_page.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'pages/onboarding_page.dart';
 
 import 'models/obd_model.dart';
 import 'core/bluetooth_service.dart';
@@ -17,6 +19,9 @@ import 'utils/theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final prefs = await SharedPreferences.getInstance();
+  final showOnboarding = !(prefs.getBool('seen_onboarding') ?? false);
 
   runApp(
     MultiProvider(
@@ -40,7 +45,7 @@ void main() async {
           update: (_, obd, bt, log, __) => OBDModel(obd, bt, log),
         ),
       ],
-      child: const MyApp(),
+      child: MyApp(showOnboarding: showOnboarding),
     ),
   );
 }
@@ -141,7 +146,8 @@ class _DrawerContentState extends State<_DrawerContent> {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool showOnboarding;
+  const MyApp({super.key, required this.showOnboarding});
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +156,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      home: const HomeScaffold(),
+      home: showOnboarding ? const OnboardingPage() : const HomeScaffold(),
     );
   }
 }
