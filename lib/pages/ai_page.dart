@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 // import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../models/obd_model.dart';
@@ -16,35 +17,43 @@ class _AIPageState extends State<AIPage> {
   bool _loading = false;
   String? _result;
   bool _thinkingMode = false;
+  String _language = 'English';
 
   Future<void> _analyze() async {
     final model = Provider.of<OBDModel>(context, listen: false);
     final dtcs = model.dtcs;
     final values = Map<String, dynamic>.from(model.values);
 
-    if (dtcs.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No DTCs to analyze')));
-      return;
-    }
-
     final prompt = StringBuffer();
-    prompt.writeln(
-      'You are a car mechanic and there\'s someone who needs your help.',
-    );
-    prompt.writeln(
-      'I will give you this car owner\'s OBD-II DTCs and a snapshot of live data from their stationary car.',
-    );
-    prompt.writeln(
-      'Please help them using this data, explain simply what each DTC likely means, and state whether it is critical to visit a mechanic.',
-    );
-    prompt.writeln('\nDTCs:');
-    for (final d in dtcs) {
-      prompt.writeln('- $d');
+
+    if (dtcs.isEmpty) {
+      // When there are no DTCs, ask the model to introduce itself and say a useful OBD fact
+      prompt.writeln(
+        'Hello AI, please introduce yourself briefly (1-2 sentences) and then state one interesting, concise fact about OBD-II diagnostics that a car owner might find useful.',
+      );
+      // include a tiny context of available live values so the assistant knows there is no fault data
+      prompt.writeln(
+        '\nNote: there are currently no DTCs recorded for this vehicle.',
+      );
+      prompt.writeln('\nLive snapshot:');
+      values.forEach((k, v) => prompt.writeln('- $k: $v'));
+    } else {
+      prompt.writeln(
+        'You are a car mechanic and there\'s someone who needs your help.',
+      );
+      prompt.writeln(
+        'I will give you this car owner\'s OBD-II DTCs and a snapshot of live data from their stationary car.',
+      );
+      prompt.writeln(
+        'Please help them using this data, explain simply what each DTC likely means, and state whether it is critical to visit a mechanic.',
+      );
+      prompt.writeln('\nDTCs:');
+      for (final d in dtcs) {
+        prompt.writeln('- $d');
+      }
+      prompt.writeln('\nLive snapshot:');
+      values.forEach((k, v) => prompt.writeln('- $k: $v'));
     }
-    prompt.writeln('\nLive snapshot:');
-    values.forEach((k, v) => prompt.writeln('- $k: $v'));
 
     setState(() {
       _loading = true;
@@ -63,6 +72,11 @@ class _AIPageState extends State<AIPage> {
       systemInstr.writeln(
         'You are a car mechanic and an expert in vehicle diagnostics. Be concise and explain in simple terms.',
       );
+      // Add language preference to system instruction
+      final langLabel = _language == 'Egyptian Arabic'
+          ? 'Egyptian Arabic (colloquial)'
+          : _language;
+      systemInstr.writeln('Respond in $langLabel.');
 
       final body = <String, dynamic>{
         'system_instruction': {
@@ -92,28 +106,49 @@ class _AIPageState extends State<AIPage> {
 
       String extractFromGemini(dynamic data) {
         if (data == null) return '';
+
+        // Common new-style response: { candidates: [ { content: { parts: [ { text: '...' } ] } } ] }
         if (data is Map && data['candidates'] != null) {
           final candidates = data['candidates'];
           if (candidates is List && candidates.isNotEmpty) {
             final sb = StringBuffer();
             for (final c in candidates) {
               if (c is Map) {
-                if (c['content'] is List) {
-                  for (final part in c['content']) {
-                    if (part is Map && part['text'] != null) {
-                      sb.writeln(part['text'].toString());
-                    }
-                    if (part is Map &&
-                        part['type'] == 'output_text' &&
-                        part['text'] != null) {
-                      sb.writeln(part['text'].toString());
+                final content = c['content'];
+
+                // content as Map with parts
+                if (content is Map && content['parts'] is List) {
+                  for (final p in content['parts']) {
+                    if (p is Map && p['text'] != null) {
+                      sb.writeln(p['text'].toString());
                     }
                   }
                 }
-                if (c['output'] is Map && c['output']['content'] is List) {
-                  for (final part in c['output']['content']) {
-                    if (part is Map && part['text'] != null) {
-                      sb.writeln(part['text'].toString());
+                // content as List (older shapes)
+                else if (content is List) {
+                  for (final item in content) {
+                    if (item is Map) {
+                      if (item['parts'] is List) {
+                        for (final p in item['parts']) {
+                          if (p is Map && p['text'] != null) {
+                            sb.writeln(p['text'].toString());
+                          }
+                        }
+                      } else if (item['text'] != null) {
+                        sb.writeln(item['text'].toString());
+                      }
+                    }
+                  }
+                }
+
+                // fallback: some responses place output/content under c['output']
+                if (c['output'] is Map) {
+                  final out = c['output'];
+                  if (out['content'] is List) {
+                    for (final o in out['content']) {
+                      if (o is Map && o['text'] != null) {
+                        sb.writeln(o['text'].toString());
+                      }
                     }
                   }
                 }
@@ -124,6 +159,7 @@ class _AIPageState extends State<AIPage> {
           }
         }
 
+        // older style: data.output -> [ { content: [ { text: '...' } ] } ]
         if (data is Map && data['output'] != null) {
           final output = data['output'];
           if (output is List && output.isNotEmpty) {
@@ -141,7 +177,9 @@ class _AIPageState extends State<AIPage> {
           }
         }
 
+        // As a last resort, if it's a list of strings
         if (data is List) return data.join('\n');
+
         return data.toString();
       }
 
@@ -174,6 +212,25 @@ class _AIPageState extends State<AIPage> {
               ),
             ),
             const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('Response language:'),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _language,
+                  items: const [
+                    DropdownMenuItem(value: 'English', child: Text('English')),
+                    DropdownMenuItem(value: 'Arabic', child: Text('Arabic')),
+                    DropdownMenuItem(
+                      value: 'Egyptian Arabic',
+                      child: Text('Egyptian Arabic'),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => _language = v ?? 'English'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             ElevatedButton(
               onPressed: _loading ? null : _analyze,
               child: _loading
@@ -202,7 +259,9 @@ class _AIPageState extends State<AIPage> {
                       maxHeight: MediaQuery.of(context).size.height * 0.5,
                     ),
                     child: SingleChildScrollView(
-                      child: SelectableText(_result ?? ''),
+                      child: _result == null || _result!.isEmpty
+                          ? const SizedBox.shrink()
+                          : MarkdownBody(data: _result ?? ''),
                     ),
                   ),
                 ),

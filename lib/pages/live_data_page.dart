@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/obd_model.dart';
+import 'connect_page.dart';
 import '../widgets/obd_value_tile.dart';
 import '../widgets/obd_status_card.dart';
 
@@ -66,6 +67,53 @@ class _LiveDataPageState extends State<LiveDataPage> {
   @override
   Widget build(BuildContext context) {
     final model = Provider.of<OBDModel>(context);
+
+    // If not connected, show a simple placeholder with a Connect button
+    if (!model.connected) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.bluetooth_disabled,
+                      size: 48,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Adapter not connected',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Connect to your Bluetooth OBD adapter to view live data.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ConnectPage()),
+                      ),
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Open Connect Page'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     final entries = [
       {'label': 'RPM', 'key': 'rpm'},

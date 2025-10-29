@@ -79,11 +79,49 @@ class _ConnectPageState extends State<ConnectPage> {
           ? const Center(child: CircularProgressIndicator())
           : _paired.isEmpty
           ? Center(
+              // add a child column with text and button to open bluetooth settings
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'No paired devices found.\nPair your adapter (Thinkdiag/ELM327) in Android Settings and return here.',
-                  textAlign: TextAlign.center,
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Center(
+                          child: Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.bluetooth_disabled,
+                                    size: 48,
+                                    color: Colors.red,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Bluetooth not Opened or No Paired Devices',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Open your Bluetooth then pair your OBD adapter then connect here.',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             )

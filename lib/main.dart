@@ -66,11 +66,11 @@ class _DrawerContentState extends State<_DrawerContent> {
     return Column(
       children: [
         const DrawerHeader(
-          decoration: BoxDecoration(color: Color.fromARGB(255, 77, 10, 60)),
+          decoration: BoxDecoration(color: Colors.deepPurple),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '🔮 OBD Pro',
+              '🔮 OBD Pro (v1.0)',
               style: TextStyle(color: Colors.white, fontSize: 20),
             ),
           ),

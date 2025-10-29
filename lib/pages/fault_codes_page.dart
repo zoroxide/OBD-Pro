@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/obd_model.dart';
 import '../core/dtc_decoder.dart';
+import 'connect_page.dart';
 
 class FaultCodesPage extends StatelessWidget {
   const FaultCodesPage({super.key});
@@ -18,6 +19,53 @@ class FaultCodesPage extends StatelessWidget {
         'FAULTS: rpm=${model.values['rpm']} battery=${model.values['battery_v']} throttle=${model.values['throttle_%']}',
       );
     } catch (_) {}
+
+    // If not connected, show placeholder and hide DTC UI
+    if (!model.connected) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.bluetooth_disabled,
+                      size: 48,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Adapter not connected',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Connect to your Bluetooth OBD adapter to view Your Car Problems and Fault Codes.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ConnectPage()),
+                      ),
+                      icon: const Icon(Icons.bluetooth_searching),
+                      label: const Text('Open Connect Page'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return SafeArea(
       child: Padding(
