@@ -12,6 +12,9 @@ class OBDService {
   final BluetoothService _btService;
   final LogService _logService;
 
+  // Stream to notify listeners when values change (event-driven UI updates)
+  final StreamController<void> _onChange = StreamController<void>.broadcast();
+
   BluetoothConnection? _connection;
   bool connecting = false;
   bool isConnected = false;
@@ -45,6 +48,9 @@ class OBDService {
   ];
 
   OBDService(this._btService, this._logService);
+
+  /// Stream that emits whenever values or DTCs are updated.
+  Stream<void> get onValuesChanged => _onChange.stream;
 
   Future<void> connect(BluetoothDevice device) async {
     connecting = true;
@@ -183,7 +189,9 @@ class OBDService {
       // Store raws that look non-hex (like ELM327, OK)
       if (up.startsWith('ELM') || up == 'OK' || up.startsWith('AT')) {
         _insertLog('<< $line');
+        continue;
       }
+
       // OBD mode 41 (response to 01) / 49 (09) / 43 (03 DTCs)
       if (up.startsWith('41') ||
           up.startsWith('49') ||
@@ -208,6 +216,7 @@ class OBDService {
         .toList();
     if (tokens.isEmpty) return;
 
+    var changed = false;
     try {
       // Mode 01 responses often start with 41
       if (tokens[0] == '41' && tokens.length >= 2) {
@@ -218,33 +227,39 @@ class OBDService {
               final a = int.parse(tokens[2], radix: 16);
               final b = int.parse(tokens[3], radix: 16);
               values['rpm'] = ((a * 256) + b) / 4.0;
+              changed = true;
             }
             break;
           case '0D': // Speed
             if (tokens.length >= 3) {
               values['speed_kmh'] = int.parse(tokens[2], radix: 16);
+              changed = true;
             }
             break;
           case '05': // Coolant
             if (tokens.length >= 3) {
               values['coolant_c'] = int.parse(tokens[2], radix: 16) - 40;
+              changed = true;
             }
             break;
           case '0F': // Intake air temp
             if (tokens.length >= 3) {
               values['intake_temp_c'] = int.parse(tokens[2], radix: 16) - 40;
+              changed = true;
             }
             break;
           case '11': // Throttle
             if (tokens.length >= 3) {
               values['throttle_%'] =
                   (int.parse(tokens[2], radix: 16) * 100) / 255.0;
+              changed = true;
             }
             break;
           case '04': // Engine load
             if (tokens.length >= 3) {
               values['engine_load_%'] =
                   (int.parse(tokens[2], radix: 16) * 100) / 255.0;
+              changed = true;
             }
             break;
           case '10': // MAF
@@ -252,21 +267,25 @@ class OBDService {
               final a = int.parse(tokens[2], radix: 16);
               final b = int.parse(tokens[3], radix: 16);
               values['maf_gps'] = ((a * 256) + b) / 100.0;
+              changed = true;
             }
             break;
           case '2F': // Fuel level
             if (tokens.length >= 3) {
               values['fuel_%'] =
                   (int.parse(tokens[2], radix: 16) * 100) / 255.0;
+              changed = true;
             }
             break;
           case '0A': // Fuel pressure
             if (tokens.length >= 3) {
               values['fuel_pressure_kpa'] = int.parse(tokens[2], radix: 16) * 3;
+              changed = true;
             }
             break;
           default:
-            values['raw_$pid'] = tokens.join(' ');
+            values['raw_${pid}'] = tokens.join(' ');
+            changed = true;
         }
       } else if (tokens[0] == '49' && tokens.length >= 3) {
         // Mode 09 (e.g., VIN) - 49 02 ...
@@ -280,11 +299,13 @@ class OBDService {
             if (byte != null && byte != 0) bytes.add(byte);
           }
           final vin = utf8.decode(bytes, allowMalformed: true);
-          if (vin.isNotEmpty) values['vin'] = vin;
+          if (vin.isNotEmpty) {
+            values['vin'] = vin;
+            changed = true;
+          }
         }
       } else if (tokens[0] == '43') {
         // Mode 03 response: DTCs
-        // Example: 43 01 33 00 00 -> parse pairs of bytes starting at tokens[1]
         final bytes = tokens
             .sublist(1)
             .map((t) => int.tryParse(t, radix: 16) ?? 0)
@@ -294,18 +315,33 @@ class OBDService {
           dtcList.clear();
           dtcList.addAll(parsed);
           values['dtcs'] = List<String>.from(dtcList);
+          changed = true;
         }
       } else if (l.toUpperCase().startsWith('NO DATA')) {
         // ignore
-      } else if (l.toUpperCase().contains('V')) {
-        final match = RegExp(r'(\d+\.\d+)V').firstMatch(l);
+      } else {
+        // Try to capture battery voltage strings like "12.6V" or "13 V"
+        final match = RegExp(
+          r'(\d+(?:\.\d+)?)\s*V',
+          caseSensitive: false,
+        ).firstMatch(l);
         if (match != null) {
-          values['battery_v'] = double.tryParse(match.group(1) ?? '');
+          final parsed = double.tryParse(match.group(1) ?? '');
+          if (parsed != null) {
+            values['battery_v'] = parsed;
+            changed = true;
+          }
         }
       }
     } catch (e) {
       _insertLog('!! parse error: $e');
       _insertLog('!! line: $l');
+    }
+
+    if (changed) {
+      try {
+        _onChange.add(null);
+      } catch (_) {}
     }
   }
 
@@ -402,5 +438,8 @@ class OBDService {
   /// Dispose when app closes
   Future<void> disposeService() async {
     await disconnect();
+    try {
+      await _onChange.close();
+    } catch (_) {}
   }
 }

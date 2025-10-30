@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,11 @@ class LiveDataPage extends StatefulWidget {
 
 class _LiveDataPageState extends State<LiveDataPage> {
   // bool _fetching = false;
+  String? _selectedKey;
+  List<double> _history = [];
+  Timer? _historyTimer;
+  final int _historyLength = 60; // keep last 60 samples (~1 minute at 1Hz)
+  int _chartTick = 0;
 
   // Future<void> _fetchInfo(OBDModel model) async {
   //   setState(() => _fetching = true);
@@ -140,6 +146,55 @@ class _LiveDataPageState extends State<LiveDataPage> {
         slivers: [
           SliverToBoxAdapter(child: const SizedBox(height: 12)),
 
+          // Chart area (appears when a tile is selected)
+          if (_selectedKey != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                child: Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Live: ${_selectedKey ?? ''}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _stopChart,
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 180,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            child: _history.isEmpty
+                                ? const Center(
+                                    child: Text('Waiting for data...'),
+                                  )
+                                : _SimpleLineChart(
+                                    key: ValueKey<int>(_chartTick),
+                                    data: List<double>.from(_history),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           // Vehicle info card
           // SliverToBoxAdapter(
           //   child: Padding(
@@ -202,49 +257,139 @@ class _LiveDataPageState extends State<LiveDataPage> {
               crossAxisCount: 2,
               childAspectRatio: 1.15,
               children: entries.map((e) {
-                final val = model.values[e['key']];
+                final key = e['key'] as String;
+                final val = model.values[key];
                 debugPrint('LIVE TILE: ${e['label']}: $val');
-                return OBDValueTile(e['label']!, val);
+                return GestureDetector(
+                  onTap: () => _startChart(key, model),
+                  child: OBDValueTile(e['label']!, val),
+                );
               }).toList(),
-            ),
-          ),
-
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Recent Logs',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 160,
-                        child: ListView.builder(
-                          reverse: true,
-                          itemCount: model.logs.length,
-                          itemBuilder: (ctx, i) => Text(
-                            model.logs[i],
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  @override
+  void dispose() {
+    _historyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startChart(String key, OBDModel model) {
+    if (_selectedKey == key) return;
+    _stopChart();
+    _selectedKey = key;
+    _history = [];
+    // seed with current value if present
+    final v = model.values[key];
+    final asDouble = _toDouble(v);
+    if (asDouble != null) _history.add(asDouble);
+    // start sampling at 1Hz
+    _historyTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final val = model.values[key];
+      final d = _toDouble(val);
+      if (d != null) {
+        setState(() {
+          _history.add(d);
+          if (_history.length > _historyLength) _history.removeAt(0);
+          _chartTick++;
+        });
+      }
+    });
+  }
+
+  void _stopChart() {
+    _historyTimer?.cancel();
+    _historyTimer = null;
+    setState(() {
+      _selectedKey = null;
+      _history = [];
+    });
+  }
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    final s = v.toString();
+    return double.tryParse(s);
+  }
+}
+
+class _SimpleLineChart extends StatelessWidget {
+  final List<double> data;
+
+  const _SimpleLineChart({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: CustomPaint(painter: _LineChartPainter(data), size: Size.infinite),
+    );
+  }
+}
+
+class _LineChartPainter extends CustomPainter {
+  final List<double> data;
+  _LineChartPainter(this.data);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.blue
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+
+    final gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.2)
+      ..strokeWidth = 1;
+
+    // draw horizontal grid lines
+    for (int i = 0; i < 4; i++) {
+      final dy = size.height * (i / 4);
+      canvas.drawLine(Offset(0, dy), Offset(size.width, dy), gridPaint);
+    }
+
+    if (data.isEmpty) return;
+    final maxV = data.reduce((a, b) => a > b ? a : b);
+    final minV = data.reduce((a, b) => a < b ? a : b);
+    final range = (maxV - minV) == 0 ? 1.0 : (maxV - minV);
+
+    final path = Path();
+    for (var i = 0; i < data.length; i++) {
+      final x = size.width * (i / (data.length - 1));
+      final y = size.height - ((data[i] - minV) / range) * size.height;
+      if (i == 0)
+        path.moveTo(x, y);
+      else
+        path.lineTo(x, y);
+    }
+
+    // draw area fill
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [Colors.blue.withOpacity(0.2), Colors.transparent],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+
+    final fillPath = Path.from(path);
+    fillPath.lineTo(size.width, size.height);
+    fillPath.lineTo(0, size.height);
+    fillPath.close();
+    canvas.drawPath(fillPath, fillPaint);
+
+    // draw stroke
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) =>
+      oldDelegate.data != data;
 }

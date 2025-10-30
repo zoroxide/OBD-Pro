@@ -11,11 +11,11 @@ class OBDModel extends ChangeNotifier {
   final BluetoothService _bt;
   final LogService _log;
 
-  Timer? _uiTimer;
+  StreamSubscription<void>? _valuesSub;
 
   OBDModel(this._obd, this._bt, this._log) {
-    // start periodic UI refresh to notify listeners for live data (1 Hz)
-    _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    // Subscribe to OBDService value change events for immediate UI updates
+    _valuesSub = _obd.onValuesChanged.listen((_) {
       if (_obd.isConnected) notifyListeners();
     });
   }
@@ -60,7 +60,7 @@ class OBDModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _uiTimer?.cancel();
+    _valuesSub?.cancel();
     _obd.disposeService();
     super.dispose();
   }

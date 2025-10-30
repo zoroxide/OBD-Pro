@@ -2,6 +2,8 @@
 
 - [ ] update the DTC decode db with more codes
 
+- [ ] add graphs in live page
+
 - [ ] make the AI search and could return a generatrd image or normal image from the internet or a redirection link
 
 - [ ] in ai page, make a selection drop-down for (simple mode / expert mode), this will help the ai in explaining the error to the user whether this user are a noob or a enthusiastic one or even a professional
@@ -13,4 +15,4 @@
 
 # Bugs:
 
-- [ ] When conneccting bluetooth, and the connection is a success, all bluetooth devices are marked as connected
+- [ ] When connecting bluetooth, and the connection is a success, all bluetooth devices are marked as connected
