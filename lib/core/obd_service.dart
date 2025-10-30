@@ -284,7 +284,7 @@ class OBDService {
             }
             break;
           default:
-            values['raw_${pid}'] = tokens.join(' ');
+            values['raw_$pid'] = tokens.join(' ');
             changed = true;
         }
       } else if (tokens[0] == '49' && tokens.length >= 3) {

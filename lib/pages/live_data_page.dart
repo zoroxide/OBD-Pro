@@ -419,10 +419,11 @@ class _LineChartPainter extends CustomPainter {
     for (var i = 0; i < data.length; i++) {
       final x = size.width * (i / (data.length - 1));
       final y = size.height - ((data[i] - minV) / range) * size.height;
-      if (i == 0)
+      if (i == 0) {
         path.moveTo(x, y);
-      else
+      } else {
         path.lineTo(x, y);
+      }
     }
 
     // draw area fill

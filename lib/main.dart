@@ -51,7 +51,7 @@ void main() async {
 }
 
 class _DrawerContent extends StatefulWidget {
-  const _DrawerContent({Key? key}) : super(key: key);
+  const _DrawerContent();
 
   @override
   State<_DrawerContent> createState() => _DrawerContentState();
