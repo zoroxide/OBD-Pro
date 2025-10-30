@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/obd_model.dart';
-import 'connect_page.dart';
 import '../widgets/obd_value_tile.dart';
 import '../widgets/obd_status_card.dart';
+import 'connect_page.dart';
 
 class LiveDataPage extends StatefulWidget {
   const LiveDataPage({super.key});
@@ -161,11 +161,41 @@ class _LiveDataPageState extends State<LiveDataPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Live: ${_selectedKey ?? ''}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  // display friendly label
+                                  (entries.firstWhere(
+                                            (e) => e['key'] == _selectedKey,
+                                            orElse: () => {
+                                              'label': _selectedKey ?? '',
+                                            },
+                                          )['label'] ??
+                                          '')
+                                      .toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  // current value with units
+                                  () {
+                                    final val = model.values[_selectedKey];
+                                    final d = _toDouble(val);
+                                    final unit = _unitForKey(
+                                      _selectedKey ?? '',
+                                    );
+                                    if (d == null) return '— $unit';
+                                    if (_selectedKey == 'rpm') {
+                                      return '${d.toInt()} $unit';
+                                    }
+                                    return '${d.toStringAsFixed(1)} $unit';
+                                  }(),
+                                  style: TextStyle(color: Colors.grey[700]),
+                                ),
+                              ],
                             ),
                             IconButton(
                               onPressed: _stopChart,
@@ -260,9 +290,10 @@ class _LiveDataPageState extends State<LiveDataPage> {
                 final key = e['key'] as String;
                 final val = model.values[key];
                 debugPrint('LIVE TILE: ${e['label']}: $val');
-                return GestureDetector(
+                return OBDValueTile(
+                  e['label']!,
+                  val,
                   onTap: () => _startChart(key, model),
-                  child: OBDValueTile(e['label']!, val),
                 );
               }).toList(),
             ),
@@ -316,6 +347,30 @@ class _LiveDataPageState extends State<LiveDataPage> {
     if (v is int) return v.toDouble();
     final s = v.toString();
     return double.tryParse(s);
+  }
+
+  String _unitForKey(String key) {
+    switch (key) {
+      case 'rpm':
+        return 'rpm';
+      case 'speed_kmh':
+        return 'km/h';
+      case 'coolant_c':
+      case 'intake_temp_c':
+        return '°C';
+      case 'throttle_%':
+      case 'engine_load_%':
+      case 'fuel_%':
+        return '%';
+      case 'maf_gps':
+        return 'g/s';
+      case 'fuel_pressure_kpa':
+        return 'kPa';
+      case 'battery_v':
+        return 'V';
+      default:
+        return '';
+    }
   }
 }
 

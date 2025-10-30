@@ -1,10 +1,10 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 // import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import '../models/obd_model.dart';
+import '../core/ai_service.dart';
 
 class AIPage extends StatefulWidget {
   const AIPage({super.key});
@@ -16,7 +16,8 @@ class AIPage extends StatefulWidget {
 class _AIPageState extends State<AIPage> {
   bool _loading = false;
   String? _result;
-  bool _thinkingMode = false;
+  // Enable Gemini "thinking" by default per user request.
+  final bool _thinkingMode = true;
   String _language = 'English';
 
   Future<void> _analyze() async {
@@ -61,12 +62,7 @@ class _AIPageState extends State<AIPage> {
     });
 
     try {
-      final dio = Dio();
-
       final geminiKey = 'AIzaSyBxyd5wKIP3BMaQJfIVSkY5WS5mB8j-h0M';
-
-      dio.options.headers['Content-Type'] = 'application/json';
-      dio.options.headers['x-goog-api-key'] = geminiKey;
 
       final systemInstr = StringBuffer();
       systemInstr.writeln(
@@ -78,114 +74,18 @@ class _AIPageState extends State<AIPage> {
           : _language;
       systemInstr.writeln('Respond in $langLabel.');
 
-      final body = <String, dynamic>{
-        'system_instruction': {
-          'parts': [
-            {'text': systemInstr.toString()},
-          ],
-        },
-        'contents': [
-          {
-            'parts': [
-              {'text': prompt.toString()},
-            ],
-          },
-        ],
-      };
+      final ai = AIService(apiKey: geminiKey);
+      final resp = await ai.generateContent(
+        systemInstruction: systemInstr.toString(),
+        prompt: prompt.toString(),
+        model: 'gemini-2.5-pro',
+        enableThinking: _thinkingMode,
+        thinkingBudget: -1,
+        enableWebSearch: true,
+      );
 
-      if (_thinkingMode) {
-        body['generationConfig'] = {
-          'thinkingConfig': {'thinkingBudget': 0},
-        };
-      }
-
-      final url =
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
-      final res = await dio.post(url, data: body);
-      final data = res.data;
-
-      String extractFromGemini(dynamic data) {
-        if (data == null) return '';
-
-        // Common new-style response: { candidates: [ { content: { parts: [ { text: '...' } ] } } ] }
-        if (data is Map && data['candidates'] != null) {
-          final candidates = data['candidates'];
-          if (candidates is List && candidates.isNotEmpty) {
-            final sb = StringBuffer();
-            for (final c in candidates) {
-              if (c is Map) {
-                final content = c['content'];
-
-                // content as Map with parts
-                if (content is Map && content['parts'] is List) {
-                  for (final p in content['parts']) {
-                    if (p is Map && p['text'] != null) {
-                      sb.writeln(p['text'].toString());
-                    }
-                  }
-                }
-                // content as List (older shapes)
-                else if (content is List) {
-                  for (final item in content) {
-                    if (item is Map) {
-                      if (item['parts'] is List) {
-                        for (final p in item['parts']) {
-                          if (p is Map && p['text'] != null) {
-                            sb.writeln(p['text'].toString());
-                          }
-                        }
-                      } else if (item['text'] != null) {
-                        sb.writeln(item['text'].toString());
-                      }
-                    }
-                  }
-                }
-
-                // fallback: some responses place output/content under c['output']
-                if (c['output'] is Map) {
-                  final out = c['output'];
-                  if (out['content'] is List) {
-                    for (final o in out['content']) {
-                      if (o is Map && o['text'] != null) {
-                        sb.writeln(o['text'].toString());
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            final s = sb.toString().trim();
-            if (s.isNotEmpty) return s;
-          }
-        }
-
-        // older style: data.output -> [ { content: [ { text: '...' } ] } ]
-        if (data is Map && data['output'] != null) {
-          final output = data['output'];
-          if (output is List && output.isNotEmpty) {
-            final first = output.first;
-            if (first is Map && first['content'] is List) {
-              final sb = StringBuffer();
-              for (final c in first['content']) {
-                if (c is Map && c['text'] != null) {
-                  sb.writeln(c['text'].toString());
-                }
-              }
-              final s = sb.toString().trim();
-              if (s.isNotEmpty) return s;
-            }
-          }
-        }
-
-        // As a last resort, if it's a list of strings
-        if (data is List) return data.join('\n');
-
-        return data.toString();
-      }
-
-      final text = extractFromGemini(data);
       if (!mounted) return;
-      setState(() => _result = text);
+      setState(() => _result = resp['text']?.toString() ?? '');
     } catch (e) {
       if (!mounted) return;
       setState(() => _result = 'Error: $e');
@@ -203,15 +103,6 @@ class _AIPageState extends State<AIPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CheckboxListTile(
-              value: _thinkingMode,
-              onChanged: (v) => setState(() => _thinkingMode = v ?? false),
-              title: const Text('Enable thinking mode (Gemini)'),
-              subtitle: const Text(
-                'When enabled, Gemini will run its internal thinking (may increase latency).',
-              ),
-            ),
-            const SizedBox(height: 8),
             Row(
               children: [
                 const Text('Response language:'),
