@@ -19,6 +19,7 @@ class _AIPageState extends State<AIPage> {
   // Enable Gemini "thinking" by default per user request.
   final bool _thinkingMode = true;
   String _language = 'English';
+  String _expertise = 'Simple'; // Simple | Enthusiast | Expert
 
   Future<void> _analyze() async {
     final model = Provider.of<OBDModel>(context, listen: false);
@@ -74,6 +75,25 @@ class _AIPageState extends State<AIPage> {
           : _language;
       systemInstr.writeln('Respond in $langLabel.');
 
+      // Tailor explanation depth based on user-selected expertise.
+      switch (_expertise) {
+        case 'Simple':
+          systemInstr.writeln(
+            'Audience level: Beginner driver with no mechanical background. Avoid jargon; define any technical term briefly. Provide clear, actionable next steps they can safely attempt and highlight when professional help is required.',
+          );
+          break;
+        case 'Enthusiast':
+          systemInstr.writeln(
+            'Audience level: Car enthusiast familiar with basic tools and common components. Provide moderate technical detail, list probable causes ordered by likelihood, include DIY diagnostic checks and when escalation is needed.',
+          );
+          break;
+        case 'Expert':
+          systemInstr.writeln(
+            'Audience level: Professional technician. Use precise automotive terminology. Provide detailed diagnostic pathways, underlying subsystem interactions, typical failure modes, recommended test values/pids, and advanced verification steps.',
+          );
+          break;
+      }
+
       final ai = AIService(apiKey: geminiKey);
       final resp = await ai.generateContent(
         systemInstruction: systemInstr.toString(),
@@ -118,6 +138,25 @@ class _AIPageState extends State<AIPage> {
                     ),
                   ],
                   onChanged: (v) => setState(() => _language = v ?? 'English'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('Mode:'),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _expertise,
+                  items: const [
+                    DropdownMenuItem(value: 'Simple', child: Text('Simple')),
+                    DropdownMenuItem(
+                      value: 'Enthusiast',
+                      child: Text('Enthusiast'),
+                    ),
+                    DropdownMenuItem(value: 'Expert', child: Text('Expert')),
+                  ],
+                  onChanged: (v) => setState(() => _expertise = v ?? 'Simple'),
                 ),
               ],
             ),
