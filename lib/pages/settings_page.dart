@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../main.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -14,6 +16,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeModel = Provider.of<ThemeModeModel>(context, listen: true);
+    final current = themeModel.mode;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: Padding(
@@ -21,6 +25,27 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text('Theme', style: TextStyle(fontWeight: FontWeight.bold)),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.system,
+              groupValue: current,
+              onChanged: (m) => themeModel.setMode(m ?? ThemeMode.system),
+              title: const Text('System default'),
+              subtitle: const Text('Follow device light/dark setting'),
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.light,
+              groupValue: current,
+              onChanged: (m) => themeModel.setMode(m ?? ThemeMode.light),
+              title: const Text('Light'),
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.dark,
+              groupValue: current,
+              onChanged: (m) => themeModel.setMode(m ?? ThemeMode.dark),
+              title: const Text('Dark'),
+            ),
+            const Divider(height: 24),
             SwitchListTile(
               value: _autoPoll,
               onChanged: (v) => setState(() => _autoPoll = v),

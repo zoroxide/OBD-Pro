@@ -23,6 +23,31 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final showOnboarding = !(prefs.getBool('seen_onboarding') ?? false);
 
+  // Determine initial theme mode with backward compatibility:
+  // 1. New key 'theme_mode' can be 'system' | 'light' | 'dark'
+  // 2. Legacy boolean 'dark_mode' still respected if present
+  final storedMode = prefs.getString('theme_mode');
+  ThemeMode initialMode;
+  if (storedMode != null) {
+    switch (storedMode) {
+      case 'light':
+        initialMode = ThemeMode.light;
+        break;
+      case 'dark':
+        initialMode = ThemeMode.dark;
+        break;
+      case 'system':
+      default:
+        initialMode = ThemeMode.system;
+    }
+  } else {
+    final legacyDark = prefs.getBool('dark_mode');
+    if (legacyDark == null) {
+      initialMode = ThemeMode.system; // default to automatic
+    } else {
+      initialMode = legacyDark ? ThemeMode.dark : ThemeMode.light;
+    }
+  }
   runApp(
     MultiProvider(
       providers: [
@@ -44,6 +69,7 @@ void main() async {
           ),
           update: (_, obd, bt, log, __) => OBDModel(obd, bt, log),
         ),
+        ChangeNotifierProvider(create: (_) => ThemeModeModel(initialMode)),
       ],
       child: MyApp(showOnboarding: showOnboarding),
     ),
@@ -151,14 +177,60 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeModel = Provider.of<ThemeModeModel>(context);
     return MaterialApp(
       title: 'OBD Pro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
+      themeMode: themeModel.mode,
       home: showOnboarding ? const OnboardingPage() : const HomeScaffold(),
     );
   }
+}
+
+class ThemeModeModel extends ChangeNotifier {
+  ThemeMode _mode;
+  ThemeModeModel(this._mode);
+  ThemeMode get mode => _mode;
+
+  /// Backward compatible method used previously by a dark mode switch.
+  Future<void> toggleDark(bool dark) async =>
+      setMode(dark ? ThemeMode.dark : ThemeMode.light);
+
+  /// Set explicit theme mode (light/dark/system) and persist.
+  Future<void> setMode(ThemeMode mode) async {
+    _mode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    switch (mode) {
+      case ThemeMode.light:
+        await prefs.setString('theme_mode', 'light');
+        await prefs.setBool('dark_mode', false); // legacy key update
+        break;
+      case ThemeMode.dark:
+        await prefs.setString('theme_mode', 'dark');
+        await prefs.setBool('dark_mode', true);
+        break;
+      case ThemeMode.system:
+        await prefs.setString('theme_mode', 'system');
+        break;
+    }
+  }
+
+  /// Cycle through modes: light -> dark -> system -> light.
+  Future<void> cycleMode() async {
+    final next = _mode == ThemeMode.light
+        ? ThemeMode.dark
+        : _mode == ThemeMode.dark
+        ? ThemeMode.system
+        : ThemeMode.light;
+    await setMode(next);
+  }
+
+  bool get isDarkExplicit => _mode == ThemeMode.dark;
+  bool get isLightExplicit => _mode == ThemeMode.light;
+  bool get isSystem => _mode == ThemeMode.system;
 }
 
 class HomeScaffold extends StatefulWidget {

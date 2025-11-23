@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Storage permissions for backward compatibility and broader export options -->
+    <!-- Legacy write permission (only up to Android 10 / SDK 29) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- Read external storage (scoped on Android 13+, limited need but included for older devices) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Broad manage external storage (Android 11+). Use only if justified; may trigger Play policy review. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <application
         android:label="obd_reader"
         android:name="${applicationName}"
